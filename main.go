@@ -25,6 +25,7 @@ type hub struct {
 }
 
 func (h *hub) run() {
+	// Configure the connection and handler
 	if h.conn == nil {
 		conn, err := mpd.Dial("tcp", "localhost:6600")
 		if err != nil {
@@ -36,7 +37,6 @@ func (h *hub) run() {
 			log.Fatal("mpd.SetVolume:", err)
 		}
 	}
-	log.Print("h.conn", h.conn)
 	for {
 		select {
 		case c := <-h.register:
@@ -66,14 +66,7 @@ func (h *hub) run() {
 }
 
 func (h *hub) handleMessage(m []byte) error {
-	var err error
-	switch string(m) {
-	case "play":
-		err = h.conn.Play(-1)
-	case "stop":
-		err = h.conn.Stop()
-	}
-	return err
+	return mpdMessageHandle(h.conn, m)
 }
 
 var h = hub{
@@ -95,6 +88,7 @@ func (c *connection) reader() {
 		if err != nil {
 			break
 		}
+		log.Print(string(message))
 		h.inbound <- message
 	}
 	c.ws.Close()
@@ -112,6 +106,24 @@ func (c *connection) writer() {
 
 var upgrader = &websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024}
 
+var (
+	addr      = flag.String("addr", ":8080", "http service address")
+	assets    = flag.String("assets", defaultAssetPath(), "path to assets")
+	homeTempl *template.Template
+)
+
+func defaultAssetPath() string {
+	p, err := build.Default.Import("github.com/Blackth0rn/go-mpd-web/public", "", build.FindOnly)
+	if err != nil {
+		return "."
+	}
+	return p.Dir
+}
+
+func homeHandler(c http.ResponseWriter, req *http.Request) {
+	http.ServeFile(c, req, filepath.Join(*assets, "index.html"))
+}
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -124,28 +136,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	c.reader()
 }
 
-var (
-	addr      = flag.String("addr", ":8080", "http service address")
-	assets    = flag.String("assets", defaultAssetPath(), "path to assets")
-	homeTempl *template.Template
-)
-
-func defaultAssetPath() string {
-	p, err := build.Default.Import("github.com/Blackth0rn/go-mpd-web", "", build.FindOnly)
-	if err != nil {
-		return "."
-	}
-	return p.Dir
-}
-
-func homeHandler(c http.ResponseWriter, req *http.Request) {
-	homeTempl.Execute(c, req.Host)
-}
-
 func main() {
 	flag.Parse()
-	homeTempl = template.Must(template.ParseFiles(filepath.Join(*assets, "home.html")))
 	go h.run()
+	fs := http.FileServer(http.Dir(defaultAssetPath()))
+	http.Handle("/public/", http.StripPrefix("/public/", fs))
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/ws", wsHandler)
 	if err := http.ListenAndServe(*addr, nil); err != nil {

@@ -1,0 +1,19 @@
+<!doctype html>
+<html ng-app="go-web-mpd">
+	<head>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.js"></script>
+		<script src="public/js/angular-websocket.js"></script>
+		<script src="public/js/app.js"></script>
+	</head>
+	<body ng-controller="MainCtrl">
+		<div id="log">
+			<p ng-repeat="message in messages">
+				{{message}}
+			</p>
+		</div>
+		<form id="form">
+			<input type="submit" value="Send" ng-click="update(packet)" />
+			<input type="message" id="msg" size="64" ng-model="packet.message" />
+		</form>
+	</body>
+</html>
