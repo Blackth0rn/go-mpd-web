@@ -21,6 +21,14 @@ angular.module('controllers', []).controller('MainCtrl', function($scope, WebSoc
 	$scope.update = function(packet) {
 		WebSocket.send(packet.message);
 	};
+
+	$scope.play = function() {
+		WebSocket.send("play");
+	};
+
+	$scope.stop = function() {
+		WebSocket.send("stop");
+	};
 });
 
 
