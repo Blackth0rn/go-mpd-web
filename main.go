@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"github.com/fhs/gompd/mpd"
 	"github.com/gorilla/websocket"
@@ -46,14 +47,19 @@ func (h *hub) run() {
 				delete(h.connections, c)
 				close(c.send)
 			}
-		case m := <-h.inbound:
-			err := h.handleMessage(m)
+		case msg := <-h.inbound:
+			ret, err := h.handleMessage(msg)
 			if err != nil {
-				m = []byte(err.Error())
+				ret.Err = []byte(err.Error())
 			}
+			jsonRet, err := json.Marshal(&ret)
+			if err != nil {
+				jsonRet = []byte(err.Error())
+			}
+			log.Print(string(jsonRet))
 			for c := range h.connections {
 				select {
-				case c.send <- append([]byte("Received:"), m...):
+				case c.send <- jsonRet:
 				default:
 					delete(h.connections, c)
 					close(c.send)
@@ -65,7 +71,7 @@ func (h *hub) run() {
 	}
 }
 
-func (h *hub) handleMessage(m []byte) error {
+func (h *hub) handleMessage(m []byte) (Command, error) {
 	return mpdMessageHandle(h.conn, m)
 }
 
@@ -88,7 +94,6 @@ func (c *connection) reader() {
 		if err != nil {
 			break
 		}
-		log.Print(string(message))
 		h.inbound <- message
 	}
 	c.ws.Close()

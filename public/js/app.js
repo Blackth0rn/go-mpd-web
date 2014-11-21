@@ -1,35 +1,60 @@
 var uri = 'ws://localhost:8080/ws';
 
-angular.module('go-web-mpd', ['angular-websocket', 'controllers',]).config(function(WebSocketProvider) {
+var mod = angular.module('go-web-mpd', ['angular-websocket',])
+
+mod.config(['WebSocketProvider', function(WebSocketProvider) {
 	WebSocketProvider
 	.prefix('')
 	.uri(uri);
-});
+}]);
 
-angular.module('controllers', []).controller('MainCtrl', function($scope, WebSocket) {
-	$scope.messages = [];
-	WebSocket.onopen(function() {
-		console.log('connection');
-		WebSocket.send('message')
-	});
+mod.service( 'mpd', [ '$rootScope', 'WebSocket', function( $rootScope, WebSocket ) {
+	var service = {
+		send: function(type, data) {
+			WebSocket.send(JSON.stringify({'type':type, 'data':data}));
+		},
+		onmessage: function(type, data) {
+			$rootScope.$emit(type, data);
+		},
+	};
 
 	WebSocket.onmessage(function(event) {
-		console.log('message: ', event.data);
-		$scope.messages.push(event.data);
+		var parsedData = JSON.parse(event.data);
+		service.onmessage(parsedData.Type, parsedData.Data);
 	});
+
+	WebSocket.onopen(function() {
+		service.send('init', 'init');
+	});
+	return service;
+}]);
+
+mod.controller('MainCtrl', [ '$scope', '$rootScope', 'mpd', function($scope, $rootScope, mpd) {
+	$scope.messages = [];
 
 	$scope.update = function(packet) {
 		WebSocket.send(packet.message);
 	};
 
 	$scope.play = function() {
-		WebSocket.send("play");
+		mpd.send("play", "play");
 	};
 
 	$scope.stop = function() {
-		WebSocket.send("stop");
+		mpd.send("stop", "stop");
 	};
-});
+
+	$rootScope.$on('play', log);
+	$rootScope.$on('stop', log);
+	$rootScope.$on('init', function(event, data){
+		log(event, JSON.parse(data));
+	});
+
+	function log(event, data) {
+		$scope.messages.push({time:Date.now(), data:data});
+		console.log(Date.now() + "::" + data);
+	};
+}]);
 
 
 
