@@ -52,7 +52,7 @@ func (h *hub) run() {
 			if err != nil {
 				ret.Err = []byte(err.Error())
 			}
-			jsonRet, err := json.Marshal(&ret)
+			jsonRet, err := json.Marshal(ret)
 			if err != nil {
 				jsonRet = []byte(err.Error())
 			}
