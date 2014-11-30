@@ -33,10 +33,6 @@ func (h *hub) run() {
 			log.Fatal("mpd.Dial:", err)
 		}
 		h.conn = conn
-		err = h.conn.SetVolume(80)
-		if err != nil {
-			log.Fatal("mpd.SetVolume:", err)
-		}
 	}
 	for {
 		select {
@@ -48,18 +44,13 @@ func (h *hub) run() {
 				close(c.send)
 			}
 		case msg := <-h.inbound:
-			ret, err := h.handleMessage(msg)
+			jsonReturn, err := h.handleMessage(msg)
 			if err != nil {
-				ret.Err = []byte(err.Error())
+				jsonReturn, _ = json.Marshal(err)
 			}
-			jsonRet, err := json.Marshal(ret)
-			if err != nil {
-				jsonRet = []byte(err.Error())
-			}
-			log.Print(string(jsonRet))
 			for c := range h.connections {
 				select {
-				case c.send <- jsonRet:
+				case c.send <- jsonReturn:
 				default:
 					delete(h.connections, c)
 					close(c.send)
@@ -71,7 +62,7 @@ func (h *hub) run() {
 	}
 }
 
-func (h *hub) handleMessage(m []byte) (Command, error) {
+func (h *hub) handleMessage(m []byte) ([]byte, error) {
 	return mpdMessageHandle(h.conn, m)
 }
 

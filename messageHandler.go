@@ -4,43 +4,69 @@ import (
 	"encoding/json"
 	"github.com/fhs/gompd/mpd"
 	"log"
+	"strconv"
 )
 
-type Response struct {
-	CurrentSong string
-	Volume      int
-	IsPlaying   bool
-}
-
-type Command struct {
-	Type string
+type cmdInput struct {
+	Cmd  string
 	Data string
-	Err  []byte
 }
 
-func mpdMessageHandle(c *mpd.Client, m []byte) (Command, error) {
+type attrReturn struct {
+	Cmd  string
+	Attr mpd.Attrs
+}
+
+type initReturn struct {
+	Cmd  string
+	Attr mpd.Attrs
+}
+
+func mpdMessageHandle(c *mpd.Client, m []byte) ([]byte, error) {
 	var err error
-	var cmd Command
-	if err := json.Unmarshal(m, &cmd); err != nil {
-		return cmd, err
+	var jsonReturn []byte
+	var input cmdInput
+	log.Print("m:", string(m))
+	if err := json.Unmarshal(m, &input); err != nil {
+		return m, err
 	} else {
-		log.Print(cmd.Type)
-		var attrs mpd.Attrs
-		switch string(cmd.Type) {
+		log.Print("input:", input)
+		switch input.Cmd {
 		case "play":
-			err = c.Play(-1)
+			if err = c.Play(-1); err == nil {
+				var attrs mpd.Attrs
+				attrs, err = c.Status()
+				if err == nil {
+					jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+				}
+			}
 		case "stop":
-			err = c.Stop()
+			if err = c.Stop(); err == nil {
+				var attrs mpd.Attrs
+				attrs, err = c.Status()
+				if err != nil {
+					jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+				}
+			}
 		case "init":
+			var attrs mpd.Attrs
 			attrs, err = c.Status()
 			if err == nil {
-				var tmpJson []byte
-				tmpJson, err = json.Marshal(&attrs)
-				cmd.Data = string(tmpJson)
+				jsonReturn, err = json.Marshal(initReturn{input.Cmd, attrs})
+			}
+		case "setVolume":
+			if volume, err := strconv.ParseInt(input.Data, 0, 0); err == nil {
+				if err = c.SetVolume(int(volume)); err == nil {
+					var attrs mpd.Attrs
+					attrs, err = c.Status()
+					log.Print("Set VOlume")
+					if err == nil {
+						jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+					}
+				}
 			}
 		}
-
 	}
-	log.Print(string(cmd.Data))
-	return cmd, err
+	log.Print("jsonReturn:", jsonReturn, " err:", err)
+	return jsonReturn, err
 }
