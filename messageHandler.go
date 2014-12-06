@@ -8,8 +8,9 @@ import (
 )
 
 type cmdInput struct {
-	Cmd  string
-	Data string
+	Cmd   string
+	Data  string
+	Token int
 }
 
 type attrReturn struct {
@@ -22,15 +23,16 @@ type initReturn struct {
 	Attr mpd.Attrs
 }
 
-func mpdMessageHandle(c *mpd.Client, m []byte) ([]byte, error) {
+func mpdMessageHandle(c *mpd.Client, m []byte) ([]byte, error, int) {
 	var err error
 	var jsonReturn []byte
 	var input cmdInput
-	log.Print("m:", string(m))
+	var broadcast int
+
 	if err := json.Unmarshal(m, &input); err != nil {
-		return m, err
+		return m, err, input.Token
 	} else {
-		log.Print("input:", input)
+		broadcast = input.Token
 		switch input.Cmd {
 		case "play":
 			if err = c.Play(-1); err == nil {
@@ -38,14 +40,25 @@ func mpdMessageHandle(c *mpd.Client, m []byte) ([]byte, error) {
 				attrs, err = c.Status()
 				if err == nil {
 					jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+					broadcast = 0
+				}
+			}
+		case "pause":
+			if err = c.Pause(true); err == nil {
+				var attrs mpd.Attrs
+				attrs, err = c.Status()
+				if err == nil {
+					jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+					broadcast = 0
 				}
 			}
 		case "stop":
 			if err = c.Stop(); err == nil {
 				var attrs mpd.Attrs
 				attrs, err = c.Status()
-				if err != nil {
+				if err == nil {
 					jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+					broadcast = 0
 				}
 			}
 		case "init":
@@ -59,14 +72,14 @@ func mpdMessageHandle(c *mpd.Client, m []byte) ([]byte, error) {
 				if err = c.SetVolume(int(volume)); err == nil {
 					var attrs mpd.Attrs
 					attrs, err = c.Status()
-					log.Print("Set VOlume")
 					if err == nil {
 						jsonReturn, err = json.Marshal(attrReturn{input.Cmd, attrs})
+						broadcast = 0
 					}
 				}
 			}
 		}
 	}
-	log.Print("jsonReturn:", jsonReturn, " err:", err)
-	return jsonReturn, err
+	log.Print("jsonReturn:", string(jsonReturn), " err:", err, " bcast:", broadcast)
+	return jsonReturn, err, broadcast
 }

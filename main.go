@@ -15,14 +15,11 @@ import (
 
 type hub struct {
 	connections map[*connection]bool
-
-	inbound chan []byte
-
-	register chan *connection
-
-	unregister chan *connection
-
-	conn *mpd.Client
+	inbound     chan []byte
+	register    chan *connection
+	unregister  chan *connection
+	conn        *mpd.Client
+	token       int
 }
 
 func (h *hub) run() {
@@ -38,22 +35,27 @@ func (h *hub) run() {
 		select {
 		case c := <-h.register:
 			h.connections[c] = true
+			c.token = h.createConnectionToken()
+			jsonReturn, _ := json.Marshal(cmdInput{"register", "", c.token})
+			c.send <- jsonReturn
 		case c := <-h.unregister:
 			if _, ok := h.connections[c]; ok {
 				delete(h.connections, c)
 				close(c.send)
 			}
 		case msg := <-h.inbound:
-			jsonReturn, err := h.handleMessage(msg)
+			jsonReturn, err, broadcast := h.handleMessage(msg)
 			if err != nil {
 				jsonReturn, _ = json.Marshal(err)
 			}
 			for c := range h.connections {
-				select {
-				case c.send <- jsonReturn:
-				default:
-					delete(h.connections, c)
-					close(c.send)
+				if broadcast == c.token || broadcast == 0 {
+					select {
+					case c.send <- jsonReturn:
+					default:
+						delete(h.connections, c)
+						close(c.send)
+					}
 				}
 			}
 		case <-time.After(time.Second * 1):
@@ -62,8 +64,13 @@ func (h *hub) run() {
 	}
 }
 
-func (h *hub) handleMessage(m []byte) ([]byte, error) {
+func (h *hub) handleMessage(m []byte) ([]byte, error, int) {
 	return mpdMessageHandle(h.conn, m)
+}
+
+func (h *hub) createConnectionToken() int {
+	h.token = h.token + 1
+	return h.token
 }
 
 var h = hub{
@@ -72,11 +79,13 @@ var h = hub{
 	unregister:  make(chan *connection),
 	connections: make(map[*connection]bool),
 	conn:        nil,
+	token:       1,
 }
 
 type connection struct {
-	ws   *websocket.Conn
-	send chan []byte
+	ws    *websocket.Conn
+	send  chan []byte
+	token int
 }
 
 func (c *connection) reader() {
@@ -93,6 +102,7 @@ func (c *connection) reader() {
 func (c *connection) writer() {
 	for message := range c.send {
 		err := c.ws.WriteMessage(websocket.TextMessage, message)
+		log.Print(string(message))
 		if err != nil {
 			break
 		}

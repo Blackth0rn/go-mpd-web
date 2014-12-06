@@ -16,12 +16,11 @@
 			<input type="message" id="msg" size="64" ng-model="packet.message" />
 		</form>
 		<div class="btn-group">
-			<button class="btn btn-primary glyphicon glyphicon-play" ng-click="play()"></button>
+			<button class="btn btn-primary glyphicon glyphicon-{{state.showPlay}}" ng-click="{{state.showPlay}}()"></button>
 			<button class="btn btn-primary glyphicon glyphicon-stop" ng-click="stop()"></button>
 		</div>
 		<br />
-		<slider ng-model="state.volume" floor="0" ceiling="100" step="1" precision="0" ng-mouseup="setVolume()"></slider>
-		{{state.volume}}
+		<slider ng-model="mpd_state.volume" floor="0" ceiling="100" step="1" precision="0" ng-mouseup="setVolume()"></slider>
 		<div id="log">
 			<p ng-repeat="message in messages">
 				{{message}}
